@@ -9,14 +9,19 @@ and exposes a FEFO-sorted endpoint.
 
 from datetime import date
 from typing import List, Optional
+from io import BytesIO
 
+import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app import models, schemas, auth
 
+
 router = APIRouter(prefix="/inventory", tags=["Inventory"])
+api_router = APIRouter(prefix="/api/inventory", tags=["Inventory"])
 
 
 def _to_component_out(component: models.Component) -> schemas.ComponentOut:
@@ -84,7 +89,70 @@ def list_components(
 
     return results
 
+@api_router.get("/export-excel")
+def export_inventory_excel(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Export the user's inventory as an Excel spreadsheet."""
 
+    components = (
+        db.query(models.Component)
+        .filter(models.Component.owner_id == current_user.id)
+        .all()
+    )
+
+    data = []
+
+    for component in components:
+        today = date.today()
+        days_in_storage = (today - component.stored_date).days
+        days_until_shelf_life = component.shelf_life_days - days_in_storage
+
+        if days_until_shelf_life <= 0:
+            status = "EXPIRED"
+        elif days_until_shelf_life <= 7:
+            status = "APPROACHING_LIMIT"
+        else:
+            status = "OK"
+
+        data.append({
+            "Batch ID": component.batch_id,
+            "Part Number": component.part_number,
+            "Manufacturer": component.manufacturer,
+            "Category": component.category,
+            "Cabinet Location": component.cabinet_location,
+            "Quantity": component.quantity,
+            "Stored Date": component.stored_date,
+            "Last Accessed Date": component.last_accessed_date,
+            "Min Temperature (°C)": component.min_temperature_c,
+            "Max Temperature (°C)": component.max_temperature_c,
+            "Max Humidity (%)": component.max_humidity_percent,
+            "Shelf Life (days)": component.shelf_life_days,
+            "Days in Storage": days_in_storage,
+            "Days Until Shelf Life": days_until_shelf_life,
+            "Status": status,
+            "Notes": component.notes,
+        })
+
+    df = pd.DataFrame(data)
+
+    output = BytesIO()
+
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="Inventory")
+
+    output.seek(0)
+
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": "attachment; filename=inventory_export.xlsx"
+        },
+    )
+
+    
 @router.get("/{component_id}", response_model=schemas.ComponentOut)
 def get_component(
     component_id: int,
