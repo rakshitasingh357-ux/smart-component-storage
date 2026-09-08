@@ -1,3 +1,17 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Environment / secrets
+.env
+
+# Local database
+*.db
+
+# Python tooling
+.pytest_cache/
 # v0 sandbox internal files
 __v0_runtime_loader.js
 __v0_devtools.tsx
