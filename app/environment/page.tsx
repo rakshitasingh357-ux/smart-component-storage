@@ -77,31 +77,37 @@ export default function EnvironmentPage() {
           PER-CABINET SENSORS
         </h3>
         <div className="flex flex-col gap-3">
-          {cabinets.map((cab) => (
-            <div key={cab.id} className="rounded-2xl border border-white/8 bg-card p-4">
-              <div className="flex items-center justify-between">
-                <p className="flex items-center gap-2 text-sm font-semibold">
-                  <span
-                    className={cn(
-                      'size-2 rounded-full',
-                      cab.tempWarning ? 'bg-warning' : 'bg-lime',
-                    )}
-                  />
-                  {cab.id}
-                </p>
-                {cab.tempWarning && (
-                  <span className="rounded-full border border-warning/30 bg-warning/10 px-2 py-0.5 text-[10px] font-medium text-warning">
-                    High Temp
-                  </span>
-                )}
+          {cabinets.map((cab) => {
+            const isTempWarning =
+              (cab as any).tempWarning ?? (cab.maxTemperature != null ? cab.temperature > cab.maxTemperature : false)
+            const pressureVal = (cab as any).pressure != null ? (cab as any).pressure.toFixed(1) : '--'
+
+            return (
+              <div key={cab.id} className="rounded-2xl border border-white/8 bg-card p-4">
+                <div className="flex items-center justify-between">
+                  <p className="flex items-center gap-2 text-sm font-semibold">
+                    <span
+                      className={cn(
+                        'size-2 rounded-full',
+                        isTempWarning ? 'bg-warning' : 'bg-lime',
+                      )}
+                    />
+                    {cab.id}
+                  </p>
+                  {isTempWarning && (
+                    <span className="rounded-full border border-warning/30 bg-warning/10 px-2 py-0.5 text-[10px] font-medium text-warning">
+                      High Temp
+                    </span>
+                  )}
+                </div>
+                <div className="mt-3 grid grid-cols-3 gap-2">
+                  <Sensor label="Temp" value={`${cab.temperature}°C`} tone="text-blue" warn={isTempWarning} />
+                  <Sensor label="Humidity" value={`${cab.humidity}%`} tone="text-purple" />
+                  <Sensor label="Pressure" value={pressureVal} tone="text-foreground" />
+                </div>
               </div>
-              <div className="mt-3 grid grid-cols-3 gap-2">
-                <Sensor label="Temp" value={`${cab.temperature}°C`} tone="text-blue" warn={cab.tempWarning} />
-                <Sensor label="Humidity" value={`${cab.humidity}%`} tone="text-purple" />
-                <Sensor label="Pressure" value={cab.pressure.toFixed(1)} tone="text-foreground" />
-              </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       </section>
     </div>

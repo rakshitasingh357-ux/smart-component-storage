@@ -1,10 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import React, { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Bell, Thermometer, Droplets, Shield, Palette, Lock } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { ToggleSwitch } from '@/components/toggle-switch'
 
 export default function SettingsPage() {
   const router = useRouter()
@@ -117,7 +116,7 @@ function SettingsGroup({
   tint,
   children,
 }: {
-  icon: typeof Bell
+  icon: React.ElementType
   title: string
   tint: string
   children: React.ReactNode
@@ -152,7 +151,23 @@ function ToggleRow({
         <p className="text-sm font-medium">{title}</p>
         <p className="text-xs text-muted-foreground">{desc}</p>
       </div>
-      <ToggleSwitch label={title} checked={checked} onChange={onChange} />
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        onClick={() => onChange(!checked)}
+        className={cn(
+          'relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200 ease-in-out',
+          checked ? 'bg-lime' : 'bg-white/10'
+        )}
+      >
+        <span
+          className={cn(
+            'inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 ease-in-out',
+            checked ? 'translate-x-6' : 'translate-x-1'
+          )}
+        />
+      </button>
     </div>
   )
 }

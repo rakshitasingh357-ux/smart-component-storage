@@ -1,8 +1,21 @@
 'use client'
 
 import { useState } from 'react'
-import type { Cabinet, CabinetSlot } from '@/types'
 import { cn } from '@/lib/utils'
+
+export interface CabinetSlot {
+  row: string
+  col: number
+  state: 'empty' | 'occupied' | 'alert'
+}
+
+export interface Cabinet {
+  id?: string | number
+  name?: string
+  cols: number
+  rows: any[]
+  slots: CabinetSlot[]
+}
 
 const stateStyle: Record<CabinetSlot['state'], string> = {
   empty: 'border-white/8 bg-white/[0.03]',
@@ -21,7 +34,7 @@ export function CabinetSlotGrid({ cabinet }: { cabinet: Cabinet }) {
           className="mb-2 grid gap-2 pl-6"
           style={{ gridTemplateColumns: `repeat(${cabinet.cols}, minmax(0, 1fr))` }}
         >
-          {Array.from({ length: cabinet.cols }).map((_, i) => (
+          {Array.from({ length: cabinet.cols }).map((_, i: number) => (
             <span key={i} className="text-center text-[11px] text-muted-foreground">
               {i + 1}
             </span>
@@ -29,45 +42,58 @@ export function CabinetSlotGrid({ cabinet }: { cabinet: Cabinet }) {
         </div>
 
         <div className="flex flex-col gap-2">
-          {cabinet.rows.map((row) => (
-            <div key={row} className="flex items-center gap-2">
-              <span className="w-4 text-[11px] text-muted-foreground">{row}</span>
-              <div
-                className="grid flex-1 gap-2"
-                style={{ gridTemplateColumns: `repeat(${cabinet.cols}, minmax(0, 1fr))` }}
-              >
-                {Array.from({ length: cabinet.cols }).map((_, col) => {
-                  const slot = cabinet.slots.find(
-                    (s) => s.row === row && s.col === col + 1,
-                  ) ?? { row, col: col + 1, state: 'empty' as const }
-                  const isSelected =
-                    selected?.row === slot.row && selected?.col === slot.col
-                  return (
-                    <button
-                      key={col}
-                      type="button"
-                      onClick={() => setSelected(slot)}
-                      aria-label={`Slot ${row}${col + 1}, ${slot.state}`}
-                      className={cn(
-                        'flex aspect-square items-center justify-center rounded-lg border transition-transform active:scale-95',
-                        stateStyle[slot.state],
-                        isSelected && 'ring-2 ring-white/60',
-                      )}
-                    >
-                      {slot.state !== 'empty' && (
-                        <span
-                          className={cn(
-                            'size-1.5 rounded-full',
-                            slot.state === 'occupied' ? 'bg-lime' : 'bg-danger',
-                          )}
-                        />
-                      )}
-                    </button>
-                  )
-                })}
+          {cabinet.rows.map((rowItem: any, rowIndex: number) => {
+            // Safely extract primitive string label from { id, slots } or string
+            const rowLabel: string =
+              typeof rowItem === 'object' && rowItem !== null
+                ? String(rowItem.id ?? rowItem.label ?? rowItem.name ?? rowIndex + 1)
+                : String(rowItem)
+
+            const rowKey =
+              typeof rowItem === 'object' && rowItem !== null
+                ? String(rowItem.id ?? rowIndex)
+                : String(rowItem)
+
+            return (
+              <div key={rowKey} className="flex items-center gap-2">
+                <span className="w-4 text-[11px] text-muted-foreground">{rowLabel}</span>
+                <div
+                  className="grid flex-1 gap-2"
+                  style={{ gridTemplateColumns: `repeat(${cabinet.cols}, minmax(0, 1fr))` }}
+                >
+                  {Array.from({ length: cabinet.cols }).map((_, col: number) => {
+                    const slot = cabinet.slots.find(
+                      (s: CabinetSlot) => String(s.row) === rowLabel && s.col === col + 1,
+                    ) ?? { row: rowLabel, col: col + 1, state: 'empty' as const }
+                    const isSelected =
+                      selected?.row === slot.row && selected?.col === slot.col
+                    return (
+                      <button
+                        key={col}
+                        type="button"
+                        onClick={() => setSelected(slot)}
+                        aria-label={`Slot ${rowLabel}${col + 1}, ${slot.state}`}
+                        className={cn(
+                          'flex aspect-square items-center justify-center rounded-lg border transition-transform active:scale-95',
+                          stateStyle[slot.state],
+                          isSelected && 'ring-2 ring-white/60',
+                        )}
+                      >
+                        {slot.state !== 'empty' && (
+                          <span
+                            className={cn(
+                              'size-1.5 rounded-full',
+                              slot.state === 'occupied' ? 'bg-lime' : 'bg-danger',
+                            )}
+                          />
+                        )}
+                      </button>
+                    )
+                  })}
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       </div>
 
@@ -79,7 +105,7 @@ export function CabinetSlotGrid({ cabinet }: { cabinet: Cabinet }) {
 
       {selected && (
         <p className="mt-3 rounded-xl border border-white/8 bg-card px-3 py-2 text-center text-xs">
-          Slot <span className="font-mono font-semibold">{selected.row}{selected.col}</span>
+          Slot <span className="font-mono font-semibold">{String(selected.row)}{selected.col}</span>
           {' — '}
           <span
             className={cn(

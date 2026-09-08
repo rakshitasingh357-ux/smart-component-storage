@@ -3,9 +3,25 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { Settings, LogOut } from 'lucide-react'
-import { systemInfo, userProfile } from '@/data/mock-data'
 import { ScreenHeader } from '@/components/app-shell'
 import { ToggleSwitch } from '@/components/toggle-switch'
+
+const userProfile = {
+  name: 'Amrutha',
+  email: 'amrutha@smartstorage.com',
+  role: 'Inventory Specialist',
+  initials: 'AS',
+  componentsTracked: 142,
+  cabinets: 3,
+  alertsSet: 5,
+}
+
+const systemInfo = {
+  connectedCabinets: 3,
+  lastSync: 'Just now',
+  firmware: 'v2.4.1',
+  organization: 'Smart Storage Inc.',
+}
 
 export default function ProfilePage() {
   const [prefs, setPrefs] = useState({
