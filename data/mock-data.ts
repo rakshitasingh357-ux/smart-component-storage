@@ -296,9 +296,22 @@ export const alerts = [
     time: "1 hour ago",
   },
 ]
+
+export const systemInfo = {
+  version: "1.0.4",
+  status: "Operational",
+  lastBackup: "2026-03-29 04:00 UTC",
+  activeNodes: 3,
+  databaseStatus: "Connected",
+  uptime: "99.98%",
+  environment: "Production",
+};
+
 export const userProfile = {
   name: "Admin User",
-  email: "admin@smartstorage.com",
+  email: "jain.anahita19@gmail.com",
   role: "Administrator",
-  avatar: "",
-}
+  department: "Hardware Operations",
+  notificationsEnabled: true,
+  smsAlerts: false,
+};
