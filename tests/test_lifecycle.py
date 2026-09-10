@@ -7,5 +7,5 @@ result = calculate_lifecycle(
     "2026-09-07"
 )
 
-
-print(result)
+assert result["batchId"] == "B001"
+assert result["partNumber"] == "TS-1001"
