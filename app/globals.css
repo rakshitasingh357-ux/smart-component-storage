@@ -1,0 +1,188 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import 'shadcn/tailwind.css';
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-lime: var(--lime);
+  --color-lime-foreground: var(--lime-foreground);
+  --color-blue: var(--blue);
+  --color-purple: var(--purple);
+  --color-danger: var(--danger);
+  --color-warning: var(--warning);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  --font-sans: var(--font-geist-sans), Arial, sans-serif;
+  --font-mono: var(--font-geist-mono), monospace;
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+}
+
+:root {
+  color-scheme: dark;
+
+  --background: #07030d;
+  --foreground: #ffffff;
+
+  --card: rgba(25, 14, 45, 0.78);
+  --card-foreground: #ffffff;
+
+  --popover: rgba(18, 10, 35, 0.95);
+  --popover-foreground: #ffffff;
+
+  --primary: #c026d3;
+  --primary-foreground: #ffffff;
+
+  --secondary: rgba(80, 40, 120, 0.45);
+  --secondary-foreground: #ffffff;
+
+  --muted: rgba(255, 255, 255, 0.07);
+  --muted-foreground: #b9aacd;
+
+  --accent: rgba(192, 38, 211, 0.15);
+  --accent-foreground: #ffffff;
+
+  --destructive: #d946ef;
+  --destructive-foreground: #ffffff;
+
+  --border: rgba(220, 170, 255, 0.16);
+  --input: rgba(255, 255, 255, 0.1);
+  --ring: #c026d3;
+
+  --lime: #d946ef;
+  --lime-foreground: #ffffff;
+
+  --blue: #8b5cf6;
+  --purple: #c026d3;
+  --danger: #d946ef;
+  --warning: #8b5cf6;
+
+  --chart-1: #8b5cf6;
+  --chart-2: #d946ef;
+  --chart-3: #6366f1;
+  --chart-4: #f472b6;
+  --chart-5: #a855f7;
+
+  --radius: 1.25rem;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: #07030d;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  color: #ffffff;
+
+  background:
+    radial-gradient(
+      circle at 50% 0%,
+      rgba(139, 92, 246, 0.22),
+      transparent 30%
+    ),
+    radial-gradient(
+      circle at 100% 35%,
+      rgba(217, 70, 239, 0.14),
+      transparent 30%
+    ),
+    radial-gradient(
+      circle at 0% 80%,
+      rgba(99, 102, 241, 0.12),
+      transparent 35%
+    ),
+    linear-gradient(
+      135deg,
+      #050209 0%,
+      #090312 45%,
+      #10051b 70%,
+      #050209 100%
+    );
+
+  background-attachment: fixed;
+}
+
+button {
+  transition:
+    transform 0.2s ease,
+    opacity 0.2s ease;
+}
+
+button:hover {
+  transform: translateY(-1px);
+}
+
+.bg-card {
+  background: linear-gradient(
+    135deg,
+    rgba(42, 24, 75, 0.75),
+    rgba(15, 8, 30, 0.85)
+  );
+
+  border: 1px solid rgba(220, 170, 255, 0.14);
+
+  box-shadow:
+    0 10px 40px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+
+  backdrop-filter: blur(18px);
+}
+
+.glow-lime {
+  box-shadow:
+    0 0 15px rgba(192, 38, 211, 0.35),
+    0 0 40px rgba(139, 92, 246, 0.18);
+}
+
+.glow-danger {
+  box-shadow:
+    0 0 15px rgba(217, 70, 239, 0.35),
+    0 0 35px rgba(139, 92, 246, 0.18);
+}
+
+::-webkit-scrollbar {
+  width: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #8b5cf6;
+  border-radius: 20px;
+}
