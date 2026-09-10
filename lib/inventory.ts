@@ -1,4 +1,7 @@
-import type { Component, StockStatus, ExpiryStatus} from '@/types'
+import type { Component } from '@/types'
+
+export type StockStatus = 'in-stock' | 'low-stock' | 'out-of-stock'
+export type ExpiryStatus = 'safe' | 'expiring-soon' | 'expired' | 'no-expiry'
 
 export function getStockStatus(component: Pick<Component, 'quantity' | 'minStock'>): StockStatus {
   if (component.quantity <= 0) return 'out-of-stock'

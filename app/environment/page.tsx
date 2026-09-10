@@ -8,12 +8,15 @@ import { ScreenHeader } from '@/components/app-shell'
 import { SensorChart, ChartAxis } from '@/components/sensor-chart'
 
 export default function EnvironmentPage() {
-  const avgTemp = (
-    cabinets.reduce((s, c) => s + c.temperature, 0) / cabinets.length
-  ).toFixed(1)
-  const avgHumidity = Math.round(
-    cabinets.reduce((s, c) => s + c.humidity, 0) / cabinets.length,
-  )
+  const validTempCabinets = cabinets.filter((c: any) => typeof c.temperature === 'number')
+  const avgTemp = validTempCabinets.length
+    ? (validTempCabinets.reduce((s: number, c: any) => s + c.temperature, 0) / validTempCabinets.length).toFixed(1)
+    : '0.0'
+
+  const validHumidityCabinets = cabinets.filter((c: any) => typeof c.humidity === 'number')
+  const avgHumidity = validHumidityCabinets.length
+    ? Math.round(validHumidityCabinets.reduce((s: number, c: any) => s + c.humidity, 0) / validHumidityCabinets.length)
+    : 0
 
   return (
     <div className="pb-6">
@@ -77,31 +80,53 @@ export default function EnvironmentPage() {
           PER-CABINET SENSORS
         </h3>
         <div className="flex flex-col gap-3">
-          {cabinets.map((cab) => (
-            <div key={cab.id} className="rounded-2xl border border-white/8 bg-card p-4">
-              <div className="flex items-center justify-between">
-                <p className="flex items-center gap-2 text-sm font-semibold">
-                  <span
-                    className={cn(
-                      'size-2 rounded-full',
-                      cab.tempWarning ? 'bg-warning' : 'bg-lime',
-                    )}
-                  />
-                  {cab.id}
-                </p>
-                {cab.tempWarning && (
-                  <span className="rounded-full border border-warning/30 bg-warning/10 px-2 py-0.5 text-[10px] font-medium text-warning">
-                    High Temp
-                  </span>
-                )}
+          {cabinets.map((cab: any) => {
+            const rawPressure = cab.pressure ?? cab.telemetry?.pressure_hpa ?? cab.telemetry?.pressure
+            const displayPressure =
+              typeof rawPressure === 'number'
+                ? rawPressure.toFixed(1)
+                : rawPressure ?? 'N/A'
+
+            const displayTemp =
+              typeof cab.temperature === 'number'
+                ? `${cab.temperature.toFixed(1)}°C`
+                : cab.temperature != null
+                ? `${cab.temperature}°C`
+                : '--°C'
+
+            const displayHumidity =
+              typeof cab.humidity === 'number'
+                ? `${Math.round(cab.humidity)}%`
+                : cab.humidity != null
+                ? `${cab.humidity}%`
+                : '--%'
+
+            return (
+              <div key={cab.id} className="rounded-2xl border border-white/8 bg-card p-4">
+                <div className="flex items-center justify-between">
+                  <p className="flex items-center gap-2 text-sm font-semibold">
+                    <span
+                      className={cn(
+                        'size-2 rounded-full',
+                        cab.tempWarning ? 'bg-warning' : 'bg-lime',
+                      )}
+                    />
+                    {cab.id}
+                  </p>
+                  {cab.tempWarning && (
+                    <span className="rounded-full border border-warning/30 bg-warning/10 px-2 py-0.5 text-[10px] font-medium text-warning">
+                      High Temp
+                    </span>
+                  )}
+                </div>
+                <div className="mt-3 grid grid-cols-3 gap-2">
+                  <Sensor label="Temp" value={displayTemp} tone="text-blue" warn={cab.tempWarning} />
+                  <Sensor label="Humidity" value={displayHumidity} tone="text-purple" />
+                  <Sensor label="Pressure" value={displayPressure} tone="text-foreground" />
+                </div>
               </div>
-              <div className="mt-3 grid grid-cols-3 gap-2">
-                <Sensor label="Temp" value={`${cab.temperature}°C`} tone="text-blue" warn={cab.tempWarning} />
-                <Sensor label="Humidity" value={`${cab.humidity}%`} tone="text-purple" />
-                <Sensor label="Pressure" value={cab.pressure.toFixed(1)} tone="text-foreground" />
-              </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       </section>
     </div>

@@ -2,33 +2,96 @@
 
 import { Suspense, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { cabinets } from '@/data/mock-data'
+import { cabinets as initialCabinets } from '@/data/mock-data'
 import { cn } from '@/lib/utils'
 import { ScreenHeader } from '@/components/app-shell'
-import { CabinetSlotGrid } from '@/components/cabinet-slot-grid'
+import { CabinetSlotGrid, SlotComponent } from '@/components/cabinet-slot-grid'
 
 function CabinetsView() {
   const params = useSearchParams()
   const initial = params.get('cab')
   const initialIndex = Math.max(
     0,
-    cabinets.findIndex((c) => c.id === initial),
+    initialCabinets.findIndex((c) => c.id === initial),
   )
+
+  // Track cabinet state locally so slot additions update immediately
+  const [cabinetList, setCabinetList] = useState<any[]>(initialCabinets)
   const [index, setIndex] = useState(initialIndex)
-  const cabinet = cabinets[index]
+  const cabinet = cabinetList[index] || initialCabinets[0]
 
   const metrics = [
-    { label: 'Temp', value: `${cabinet.temperature}°C`, tone: 'text-blue' },
-    { label: 'Humidity', value: `${cabinet.humidity}%`, tone: 'text-purple' },
-    { label: 'Utilization', value: `${cabinet.utilization}%`, tone: 'text-lime' },
+    { label: 'Temp', value: `${cabinet?.temperature ?? '--'}°C`, tone: 'text-blue' },
+    { label: 'Humidity', value: `${cabinet?.humidity ?? '--'}%`, tone: 'text-purple' },
+    { label: 'Utilization', value: `${cabinet?.utilization ?? '--'}%`, tone: 'text-lime' },
   ]
+
+  // Handler to assign component to slot & persist to inventory
+  const handleAddComponent = async (slotId: string, newComponent: SlotComponent) => {
+    const cleanSlotId = slotId.replace(/^ROW-/, '').trim()
+    const rowLetter = cleanSlotId.charAt(0)
+
+    setCabinetList((prev) => {
+      const updated = [...prev]
+      const currentCab = { ...updated[index] }
+
+      // Clone rows and slots
+      if (Array.isArray(currentCab.rows)) {
+        currentCab.rows = currentCab.rows.map((row: any) => {
+          const rowId = String(row.id || '').replace(/^ROW-/, '').trim()
+          if (rowId === rowLetter && Array.isArray(row.slots)) {
+            return {
+              ...row,
+              slots: row.slots.map((s: any) => {
+                const sId = String(s.id || '').replace(/^ROW-/, '').trim()
+                if (sId === cleanSlotId) {
+                  return {
+                    ...s,
+                    component: {
+                      ...newComponent,
+                      id: `comp-${Date.now()}`,
+                    },
+                  }
+                }
+                return s
+              }),
+            }
+          }
+          return row
+        })
+      }
+
+      // Increment cabinet component count
+      currentCab.componentCount = (currentCab.componentCount || 0) + 1
+      updated[index] = currentCab
+      return updated
+    })
+
+    // Optional: Sync with FastAPI backend
+    try {
+      await fetch('http://localhost:8000/components', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          cabinet_id: cabinet.id,
+          slot_id: slotId,
+          name: newComponent.name,
+          part_number: newComponent.partNumber,
+          quantity: newComponent.quantity,
+          batch: newComponent.batch,
+        }),
+      })
+    } catch {
+      // Backend not running or endpoint pending; local state remains updated
+    }
+  }
 
   return (
     <div className="pb-6">
       <ScreenHeader title="Smart Cabinets" />
 
       <div className="flex gap-2 px-5">
-        {cabinets.map((c, i) => (
+        {cabinetList.map((c, i) => (
           <button
             key={c.id}
             type="button"
@@ -51,7 +114,7 @@ function CabinetsView() {
             <div>
               <h2 className="text-lg font-bold">{cabinet.name}</h2>
               <p className="text-xs text-muted-foreground">
-                {cabinet.id} · {cabinet.componentCount} components
+                {cabinet.id} · {cabinet.componentCount ?? 0} components
               </p>
             </div>
             <span
@@ -78,11 +141,12 @@ function CabinetsView() {
         </div>
       </section>
 
+      {/* Grid section with duplicate title removed */}
       <section className="mt-5 px-5">
-        <h3 className="mb-3 text-xs font-semibold tracking-widest text-muted-foreground">
-          SLOT GRID
-        </h3>
-        <CabinetSlotGrid cabinet={cabinet} />
+        <CabinetSlotGrid
+          cabinet={cabinet}
+          onAddComponent={handleAddComponent}
+        />
       </section>
     </div>
   )

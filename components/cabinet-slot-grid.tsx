@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 
-interface SlotComponent {
+export interface SlotComponent {
   id?: string;
   name?: string;
   partNumber?: string;
@@ -13,19 +13,19 @@ interface SlotComponent {
   alert?: boolean;
 }
 
-interface SlotData {
+export interface SlotData {
   id: string;
   component?: SlotComponent | null;
   alert?: boolean;
 }
 
-interface CabinetRow {
+export interface CabinetRow {
   id: string;
   label?: string;
   slots?: SlotData[];
 }
 
-interface Cabinet {
+export interface Cabinet {
   cols?: number;
   rows?: CabinetRow[];
 }
@@ -34,15 +34,28 @@ interface CabinetSlotGridProps {
   cabinet?: Cabinet;
   selectedSlot?: string | null;
   onSelectSlot?: (slotId: string) => void;
+  onAddComponent?: (slotId: string, component: SlotComponent) => void;
 }
 
 export function CabinetSlotGrid({
   cabinet,
   selectedSlot: controlledSelectedSlot,
   onSelectSlot,
+  onAddComponent,
 }: CabinetSlotGridProps) {
   const [internalSelected, setInternalSelected] = useState<string>("A2");
   const activeSlotId = controlledSelectedSlot ?? internalSelected;
+
+  // Local state to track added components dynamically across slots
+  const [dynamicSlots, setDynamicSlots] = useState<Record<string, SlotComponent>>({});
+
+  // Inline form state
+  const [isAdding, setIsAdding] = useState(false);
+  const [formData, setFormData] = useState({
+    partNumber: "",
+    quantity: 1,
+    batch: "",
+  });
 
   const cols = cabinet?.cols || 4;
   const rawRows = cabinet?.rows || [
@@ -52,14 +65,16 @@ export function CabinetSlotGrid({
 
   const handleSelect = (slotId: string) => {
     setInternalSelected(slotId);
+    setIsAdding(false);
     if (onSelectSlot) onSelectSlot(slotId);
   };
 
   const normalizeId = (id?: string) => (id ? id.replace(/^ROW-/, "").trim() : "");
   const cleanActiveId = normalizeId(activeSlotId);
 
+  // Find slot data from props or locally assigned components
   let selectedSlotData: SlotData | null = null;
-  let selectedComponent: SlotComponent | null = null;
+  let selectedComponent: SlotComponent | null = dynamicSlots[cleanActiveId] || null;
 
   for (const r of rawRows) {
     if (Array.isArray(r.slots)) {
@@ -68,13 +83,43 @@ export function CabinetSlotGrid({
       );
       if (match) {
         selectedSlotData = match;
-        selectedComponent = match.component ?? null;
+        if (!selectedComponent && match.component) {
+          selectedComponent = match.component;
+        }
         break;
       }
     }
   }
 
   const isSlotAlert = Boolean(selectedSlotData?.alert || selectedComponent?.alert);
+
+  const handleCreateComponent = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.partNumber.trim()) return;
+
+    const newComponent: SlotComponent = {
+      name: formData.partNumber.trim(),
+      partNumber: formData.partNumber.trim(),
+      quantity: Number(formData.quantity) || 1,
+      batch: formData.batch.trim() || `BAT-${Math.floor(100 + Math.random() * 900)}`,
+      alert: false,
+    };
+
+    // Update locally so grid reflects occupancy immediately
+    setDynamicSlots((prev) => ({
+      ...prev,
+      [cleanActiveId]: newComponent,
+    }));
+
+    // Trigger parent/backend handler
+    if (onAddComponent) {
+      onAddComponent(activeSlotId, newComponent);
+    }
+
+    // Reset form
+    setFormData({ partNumber: "", quantity: 1, batch: "" });
+    setIsAdding(false);
+  };
 
   return (
     <div className="w-full max-w-md select-none font-sans text-white">
@@ -117,7 +162,8 @@ export function CabinetSlotGrid({
                       (s) => normalizeId(s.id) === standardSlotId
                     );
 
-                    const component = slotData?.component;
+                    const component =
+                      dynamicSlots[standardSlotId] || slotData?.component;
                     const isOccupied = Boolean(component);
                     const isSelected = cleanActiveId === standardSlotId;
                     const hasAlert = Boolean(slotData?.alert || component?.alert);
@@ -172,7 +218,7 @@ export function CabinetSlotGrid({
         </div>
       </div>
 
-      {/* Dynamic Slot Detail Card */}
+      {/* Dynamic Slot Detail / Add Component Card */}
       <div className="mt-4 rounded-3xl border border-purple-900/30 bg-[#160628]/90 p-4 shadow-xl backdrop-blur-xl">
         <div className="flex items-center justify-between">
           <span className="font-mono text-xs font-bold text-white">
@@ -189,9 +235,9 @@ export function CabinetSlotGrid({
           )}
         </div>
 
-        <div className="mt-3 flex items-center justify-between border-t border-purple-900/30 pt-3 text-xs text-purple-200/70">
+        <div className="mt-3 border-t border-purple-900/30 pt-3 text-xs text-purple-200/70">
           {selectedComponent ? (
-            <>
+            <div className="flex items-center justify-between">
               <div>
                 Part:{" "}
                 <span className="font-semibold text-white">
@@ -210,9 +256,71 @@ export function CabinetSlotGrid({
                   {selectedComponent.batch || selectedComponent.batchNumber || "BAT-001"}
                 </span>
               </div>
-            </>
+            </div>
+          ) : isAdding ? (
+            <form onSubmit={handleCreateComponent} className="flex flex-col gap-3">
+              <div className="grid grid-cols-3 gap-2">
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] uppercase tracking-wider text-purple-300/70">Part Name/ID</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. ESP32-WROOM"
+                    value={formData.partNumber}
+                    onChange={(e) => setFormData({ ...formData, partNumber: e.target.value })}
+                    className="w-full rounded-xl border border-purple-800/60 bg-[#250e3e]/80 px-2.5 py-1.5 text-xs text-white placeholder-purple-400/30 outline-none focus:border-purple-400"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] uppercase tracking-wider text-purple-300/70">Quantity</label>
+                  <input
+                    type="number"
+                    min="1"
+                    required
+                    value={formData.quantity}
+                    onChange={(e) => setFormData({ ...formData, quantity: parseInt(e.target.value) || 1 })}
+                    className="w-full rounded-xl border border-purple-800/60 bg-[#250e3e]/80 px-2.5 py-1.5 text-xs text-white placeholder-purple-400/30 outline-none focus:border-purple-400"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] uppercase tracking-wider text-purple-300/70">Batch</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. BAT-104"
+                    value={formData.batch}
+                    onChange={(e) => setFormData({ ...formData, batch: e.target.value })}
+                    className="w-full rounded-xl border border-purple-800/60 bg-[#250e3e]/80 px-2.5 py-1.5 text-xs text-white placeholder-purple-400/30 outline-none focus:border-purple-400"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setIsAdding(false)}
+                  className="rounded-xl px-3 py-1 text-xs text-purple-300/70 hover:text-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-xl bg-[#9333ea] px-4 py-1 text-xs font-semibold text-white shadow-md hover:bg-[#a855f7] active:scale-95 transition"
+                >
+                  Assign to Slot
+                </button>
+              </div>
+            </form>
           ) : (
-            <div className="text-purple-300/50 italic">No component assigned to this slot.</div>
+            <div className="flex items-center justify-between">
+              <span className="italic text-purple-300/50">No component assigned to this slot.</span>
+              <button
+                type="button"
+                onClick={() => setIsAdding(true)}
+                className="rounded-xl border border-purple-700/50 bg-[#3b1260]/60 px-3 py-1 text-xs font-medium text-purple-200 hover:border-purple-400 hover:bg-[#5b1988] transition"
+              >
+                + Add Component
+              </button>
+            </div>
           )}
         </div>
       </div>
