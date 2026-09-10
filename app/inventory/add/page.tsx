@@ -1,22 +1,19 @@
-'use client'
+﻿'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Check, Loader2 } from 'lucide-react'
-import { cabinets as fallbackCabinets } from '@/data/mock-data'
-import { fetchApi } from '@/lib/api'
-import type { ComponentCategory } from '@/types'
+import { ArrowLeft, Check } from 'lucide-react'
+import { cabinets } from '@/data/mock-data'
 import { cn } from '@/lib/utils'
 
 const categories: string[] = [
   'Microcontrollers',
-  'Sensors',
-  'Passives',
-  'ICs',
-  'Connectors',
-  'Power',
+  'Wireless Modules',
+  'Voltage Regulators',
+  'Capacitors',
   'Transistors',
   'Resistors',
+  'Sensors',
 ]
 
 interface FormState {
@@ -48,21 +45,7 @@ export default function AddComponentPage() {
   const router = useRouter()
   const [form, setForm] = useState<FormState>(empty)
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({})
-  const [cabinetsList, setCabinetsList] = useState<any[]>(fallbackCabinets)
-  const [submitting, setSubmitting] = useState(false)
   const [saved, setSaved] = useState(false)
-
-  useEffect(() => {
-    fetchApi<any[]>('/cabinets')
-      .then((data) => {
-        if (Array.isArray(data) && data.length > 0) {
-          setCabinetsList(data)
-        }
-      })
-      .catch(() => {
-        setCabinetsList(fallbackCabinets)
-      })
-  }, [])
 
   function update<K extends keyof FormState>(key: K, value: string) {
     setForm((f) => ({ ...f, [key]: value }))
@@ -80,39 +63,11 @@ export default function AddComponentPage() {
     return Object.keys(next).length === 0
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!validate() || submitting || saved) return
-
-    setSubmitting(true)
-
-    const payload = {
-      name: form.name.trim(),
-      category: form.category,
-      quantity: Number(form.quantity) || 0,
-      minStock: Number(form.minStock) || 0,
-      min_stock: Number(form.minStock) || 0,
-      cabinet: form.cabinetId,
-      cabinet_id: form.cabinetId,
-      shelf: form.shelf.trim() || form.slot.trim().charAt(0) || 'A',
-      slot: form.slot.trim(),
-      description: form.description.trim(),
-    }
-
-    try {
-      await fetchApi('/components', {
-        method: 'POST',
-        body: JSON.stringify(payload),
-      })
-    } catch {
-      // Backend not running or still offline; proceed with optimistic local redirect
-    } finally {
-      setSubmitting(false)
-      setSaved(true)
-      setTimeout(() => {
-        router.push('/inventory')
-      }, 750)
-    }
+    if (!validate()) return
+    setSaved(true)
+    setTimeout(() => router.push('/inventory'), 900)
   }
 
   return (
@@ -121,7 +76,7 @@ export default function AddComponentPage() {
         <button
           type="button"
           onClick={() => router.back()}
-          className="flex size-9 items-center justify-center rounded-xl border border-white/10 bg-card transition active:scale-95"
+          className="flex size-9 items-center justify-center rounded-xl border border-white/10 bg-card"
           aria-label="Go back"
         >
           <ArrowLeft className="size-4" />
@@ -184,7 +139,7 @@ export default function AddComponentPage() {
             onChange={(e) => update('cabinetId', e.target.value)}
           >
             <option value="">Select cabinet</option>
-            {cabinetsList.map((c) => (
+            {cabinets.map((c) => (
               <option key={c.id} value={c.id} className="text-foreground">
                 {c.id} — {c.name}
               </option>
@@ -223,16 +178,12 @@ export default function AddComponentPage() {
 
         <button
           type="submit"
-          disabled={submitting || saved}
-          className="mt-2 flex items-center justify-center gap-2 rounded-2xl bg-lime py-3.5 text-sm font-semibold text-lime-foreground glow-lime transition active:scale-[0.99] disabled:opacity-70"
+          disabled={saved}
+          className="mt-2 flex items-center justify-center gap-2 rounded-2xl bg-lime py-3.5 text-sm font-semibold text-lime-foreground glow-lime disabled:opacity-70"
         >
-          {submitting ? (
+          {saved ? (
             <>
-              <Loader2 className="size-4 animate-spin" /> Saving component...
-            </>
-          ) : saved ? (
-            <>
-              <Check className="size-4" strokeWidth={2.5} /> Component added!
+              <Check className="size-4" strokeWidth={2.5} /> Component added
             </>
           ) : (
             'Add Component'
