@@ -1,21 +1,67 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft, Minus, Plus, Pencil, MapPin } from 'lucide-react'
-import { components } from '@/data/mock-data'
+import { ArrowLeft, Minus, Plus, Pencil, MapPin, RefreshCw } from 'lucide-react'
+
+import { components as fallbackComponents } from '@/data/mock-data'
 import { getStockStatus } from '@/lib/inventory'
+import { fetchApi } from '@/lib/api'
+import type { Component } from '@/types'
+
 import { CategoryIcon } from '@/components/category-icon'
 import { StatusBadge } from '@/components/status-badge'
+import { SmartLogicCard } from '@/components/smart-logic-card'
 
 export default function ComponentDetailPage() {
   const params = useParams<{ id: string }>()
   const router = useRouter()
-  const component = components.find((c) => c.id === params.id)
+  const componentId = params?.id
 
-  const [quantity, setQuantity] = useState(component?.quantity ?? 0)
-  const [editing, setEditing] = useState(false)
+  const [component, setComponent] = useState<Component | null>(null)
+  const [loading, setLoading] = useState<boolean>(true)
+  const [quantity, setQuantity] = useState<number>(0)
+  const [editing, setEditing] = useState<boolean>(false)
+
+  useEffect(() => {
+    if (!componentId) return
+
+    let isMounted = true
+    setLoading(true)
+
+    // Attempt fetching from backend, fallback to mock list if offline
+    fetchApi<Component>(`/components/${componentId}`)
+      .then((data) => {
+        if (isMounted && data) {
+          setComponent(data)
+          setQuantity(data.quantity ?? 0)
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          const fallback = fallbackComponents.find((c) => c.id === componentId) || null
+          setComponent(fallback)
+          if (fallback) setQuantity(fallback.quantity ?? 0)
+        }
+      })
+      .finally(() => {
+        if (isMounted) setLoading(false)
+      })
+
+    return () => {
+      isMounted = false
+    }
+  }, [componentId])
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 px-5 py-24 text-center">
+        <RefreshCw className="size-6 animate-spin text-lime" />
+        <p className="text-sm text-muted-foreground">Loading component specs...</p>
+      </div>
+    )
+  }
 
   if (!component) {
     return (
@@ -33,12 +79,11 @@ export default function ComponentDetailPage() {
   const facts = [
     { label: 'Quantity', value: String(quantity) },
     { label: 'Minimum Stock', value: String(component.minStock) },
-    { label: 'Cabinet', value: component.cabinetId },
+    { label: 'Cabinet', value: component.cabinet },
     { label: 'Shelf', value: component.shelf },
     { label: 'Slot', value: component.slot },
     { label: 'Category', value: component.category },
   ]
-
   return (
     <div className="pb-6">
       <header className="flex items-center gap-3 px-5 pt-6 pb-4">
@@ -53,6 +98,7 @@ export default function ComponentDetailPage() {
         <h1 className="text-lg font-bold">Component Details</h1>
       </header>
 
+      {/* Main Info Card */}
       <section className="px-5">
         <div className="flex items-center gap-4 rounded-2xl border border-white/8 bg-card p-4">
           <CategoryIcon category={component.category} className="size-14 rounded-2xl" iconClassName="size-7" />
@@ -64,6 +110,12 @@ export default function ComponentDetailPage() {
         </div>
       </section>
 
+      {/* Smart Logic Telemetry & Diagnostics Section */}
+      <section className="mt-4 px-5">
+        <SmartLogicCard componentId={component.id} />
+      </section>
+
+      {/* Facts Grid */}
       <section className="mt-4 grid grid-cols-2 gap-3 px-5">
         {facts.map((f) => (
           <div key={f.label} className="rounded-2xl border border-white/8 bg-card p-3">
@@ -73,6 +125,7 @@ export default function ComponentDetailPage() {
         ))}
       </section>
 
+      {/* Description */}
       <section className="mt-4 px-5">
         <div className="rounded-2xl border border-white/8 bg-card p-4">
           <p className="mb-2 text-sm font-semibold">Description</p>
@@ -80,6 +133,7 @@ export default function ComponentDetailPage() {
         </div>
       </section>
 
+      {/* Quantity Adjustment Drawer */}
       {editing && (
         <section className="mt-4 px-5">
           <div className="flex items-center justify-between rounded-2xl border border-lime/25 bg-lime/[0.06] p-4">
@@ -109,11 +163,12 @@ export default function ComponentDetailPage() {
         </section>
       )}
 
+      {/* Actions */}
       <section className="mt-5 flex flex-col gap-3 px-5">
         <button
           type="button"
           onClick={() => setEditing((e) => !e)}
-          className="flex items-center justify-center gap-2 rounded-2xl bg-lime py-3 text-sm font-semibold text-lime-foreground glow-lime"
+          className="flex items-center justify-center gap-2 rounded-2xl bg-lime py-3 text-sm font-semibold text-lime-foreground glow-lime transition active:scale-95"
         >
           <Plus className="size-4" strokeWidth={2.5} />
           {editing ? 'Done updating' : 'Update Quantity'}
@@ -122,16 +177,16 @@ export default function ComponentDetailPage() {
           <button
             type="button"
             onClick={() => setEditing(true)}
-            className="flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-card py-3 text-sm font-medium"
+            className="flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-card py-3 text-sm font-medium transition active:scale-95"
           >
             <Pencil className="size-4" /> Edit
           </button>
           <Link
-            href={`/cabinets?cab=${component.cabinetId}`}
-            className="flex items-center justify-center gap-2 rounded-2xl border border-blue/30 bg-blue/10 py-3 text-sm font-medium text-blue"
-          >
-            <MapPin className="size-4" /> Locate
-          </Link>
+    href={`/cabinets?cab=${component.cabinet}`}
+    className="flex items-center justify-center gap-2 rounded-2xl border border-blue/30 bg-blue/10 py-3 text-sm font-medium text-blue transition active:scale-95"
+  >
+    <MapPin className="size-4" /> Locate
+  </Link>
         </div>
       </section>
     </div>

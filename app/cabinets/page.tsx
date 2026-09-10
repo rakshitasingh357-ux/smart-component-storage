@@ -1,23 +1,55 @@
 'use client'
 
-import { Suspense, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
+import { RefreshCw } from 'lucide-react'
 import { cabinets as initialCabinets } from '@/data/mock-data'
+import { fetchApi } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { ScreenHeader } from '@/components/app-shell'
 import { CabinetSlotGrid, SlotComponent } from '@/components/cabinet-slot-grid'
 
 function CabinetsView() {
   const params = useSearchParams()
-  const initial = params.get('cab')
-  const initialIndex = Math.max(
-    0,
-    initialCabinets.findIndex((c) => c.id === initial),
-  )
+  const cabParam = params.get('cab')
 
-  // Track cabinet state locally so slot additions update immediately
   const [cabinetList, setCabinetList] = useState<any[]>(initialCabinets)
-  const [index, setIndex] = useState(initialIndex)
+  const [index, setIndex] = useState(0)
+  const [loading, setLoading] = useState(false)
+
+  // Load cabinets from FastAPI backend
+  const loadCabinets = async () => {
+    setLoading(true)
+    try {
+      const data = await fetchApi<any[]>('/cabinets')
+      if (Array.isArray(data) && data.length > 0) {
+        setCabinetList(data)
+      } else {
+        setCabinetList(initialCabinets)
+      }
+    } catch {
+      setCabinetList(initialCabinets)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadCabinets()
+  }, [])
+
+  // Sync index whenever query parameter or cabinet list changes
+  useEffect(() => {
+    if (cabParam && cabinetList.length > 0) {
+      const foundIdx = cabinetList.findIndex(
+        (c) => c.id?.toLowerCase() === cabParam.toLowerCase()
+      )
+      if (foundIdx !== -1) {
+        setIndex(foundIdx)
+      }
+    }
+  }, [cabParam, cabinetList])
+
   const cabinet = cabinetList[index] || initialCabinets[0]
 
   const metrics = [
@@ -35,7 +67,6 @@ function CabinetsView() {
       const updated = [...prev]
       const currentCab = { ...updated[index] }
 
-      // Clone rows and slots
       if (Array.isArray(currentCab.rows)) {
         currentCab.rows = currentCab.rows.map((row: any) => {
           const rowId = String(row.id || '').replace(/^ROW-/, '').trim()
@@ -61,17 +92,14 @@ function CabinetsView() {
         })
       }
 
-      // Increment cabinet component count
       currentCab.componentCount = (currentCab.componentCount || 0) + 1
       updated[index] = currentCab
       return updated
     })
 
-    // Optional: Sync with FastAPI backend
     try {
-      await fetch('http://localhost:8000/components', {
+      await fetchApi('/components', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           cabinet_id: cabinet.id,
           slot_id: slotId,
@@ -88,7 +116,20 @@ function CabinetsView() {
 
   return (
     <div className="pb-6">
-      <ScreenHeader title="Smart Cabinets" />
+      <ScreenHeader
+        title="Smart Cabinets"
+        action={
+          <button
+            type="button"
+            onClick={loadCabinets}
+            disabled={loading}
+            className="flex size-10 items-center justify-center rounded-xl border border-white/10 bg-card text-muted-foreground transition active:scale-95 disabled:opacity-50"
+            title="Refresh cabinets"
+          >
+            <RefreshCw className={cn('size-4', loading && 'animate-spin text-lime')} />
+          </button>
+        }
+      />
 
       <div className="flex gap-2 px-5">
         {cabinetList.map((c, i) => (
@@ -100,7 +141,7 @@ function CabinetsView() {
               'flex-1 rounded-xl border py-2.5 text-sm font-medium transition-colors',
               i === index
                 ? 'border-lime/40 bg-lime/15 text-lime'
-                : 'border-white/10 bg-card text-muted-foreground',
+                : 'border-white/10 bg-card text-muted-foreground'
             )}
           >
             {c.id}
@@ -112,21 +153,21 @@ function CabinetsView() {
         <div className="rounded-2xl border border-white/8 bg-card p-4">
           <div className="flex items-start justify-between">
             <div>
-              <h2 className="text-lg font-bold">{cabinet.name}</h2>
+              <h2 className="text-lg font-bold">{cabinet?.name ?? 'Cabinet'}</h2>
               <p className="text-xs text-muted-foreground">
-                {cabinet.id} · {cabinet.componentCount ?? 0} components
+                {cabinet?.id} · {cabinet?.componentCount ?? 0} components
               </p>
             </div>
             <span
               className={cn(
                 'flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium',
-                cabinet.status === 'online'
+                cabinet?.status === 'online'
                   ? 'border-lime/30 bg-lime/10 text-lime'
-                  : 'border-white/10 text-muted-foreground',
+                  : 'border-white/10 text-muted-foreground'
               )}
             >
               <span className="size-1.5 rounded-full bg-current" />
-              {cabinet.status === 'online' ? 'Online' : 'Offline'}
+              {cabinet?.status === 'online' ? 'Online' : 'Offline'}
             </span>
           </div>
 
@@ -141,7 +182,6 @@ function CabinetsView() {
         </div>
       </section>
 
-      {/* Grid section with duplicate title removed */}
       <section className="mt-5 px-5">
         <CabinetSlotGrid
           cabinet={cabinet}
