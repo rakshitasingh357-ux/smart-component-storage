@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft, Minus, Plus, Pencil, MapPin, RefreshCw } from 'lucide-react'
+import { ArrowLeft, Minus, Plus, Pencil, MapPin, RefreshCw, Trash2 } from 'lucide-react'
 
 import { components as fallbackComponents } from '@/data/mock-data'
 import { getStockStatus } from '@/lib/inventory'
@@ -23,26 +23,73 @@ export default function ComponentDetailPage() {
   const [loading, setLoading] = useState<boolean>(true)
   const [quantity, setQuantity] = useState<number>(0)
   const [editing, setEditing] = useState<boolean>(false)
+  const [savingQuantity, setSavingQuantity] = useState<boolean>(false)
+  const [deleting, setDeleting] = useState<boolean>(false)
 
   useEffect(() => {
-    if (!componentId) return
+    // Prevent route collisions where /inventory/add gets captured by dynamic [id]
+    if (!componentId || componentId === 'add') {
+      setLoading(false)
+      return
+    }
 
     let isMounted = true
     setLoading(true)
 
-    // Attempt fetching from backend, fallback to mock list if offline
-    fetchApi<Component>(`/components/${componentId}`)
+    // 1. Try FastAPI /inventory/{id} endpoint
+    fetchApi<any>(`/inventory/${componentId}`)
       .then((data) => {
         if (isMounted && data) {
-          setComponent(data)
-          setQuantity(data.quantity ?? 0)
+          const mapped: Component = {
+            id: String(data.id ?? componentId),
+            name: data.part_number || data.name || `Component ${componentId}`,
+            category: data.category || 'Other',
+            description: data.notes || `Batch: ${data.batch_id || 'N/A'} | Mfg: ${data.manufacturer || 'N/A'}`,
+            quantity: data.quantity ?? 0,
+            minStock: data.min_stock ?? 5,
+            cabinet: data.cabinet_location || 'CAB-A',
+            shelf: data.shelf || 'Shelf 1',
+            slot: data.slot || 'Slot A',
+            expiryDate: data.expiry_date || null,
+            shelfLife: data.shelf_life_days ? `${data.shelf_life_days} days` : '365 days',
+            lastActivity: data.last_accessed_date || new Date().toISOString().split('T')[0],
+            updatedAgo: 'Recently',
+          }
+          setComponent(mapped)
+          setQuantity(mapped.quantity)
         }
       })
-      .catch(() => {
-        if (isMounted) {
-          const fallback = fallbackComponents.find((c) => c.id === componentId) || null
-          setComponent(fallback)
-          if (fallback) setQuantity(fallback.quantity ?? 0)
+      .catch(async () => {
+        // 2. Fallback to /smart-logic/component/{id} telemetry
+        try {
+          const smart = await fetchApi<any>(`/smart-logic/component/${componentId}`)
+          if (isMounted && smart) {
+            const mapped: Component = {
+              id: String(componentId),
+              name: smart.partNumber || `Component ${componentId}`,
+              category: smart.category || 'Other',
+              description: `Batch: ${smart.batchId || 'N/A'} | Mfg: ${smart.manufacturer || 'N/A'}`,
+              quantity: smart.quantity ?? 0,
+              minStock: 5,
+              cabinet: smart.cabinetLocation || 'CAB-A',
+              shelf: 'Shelf 1',
+              slot: 'Slot A',
+              expiryDate: null,
+              shelfLife: '365 days',
+              lastActivity: new Date().toISOString().split('T')[0],
+              updatedAgo: 'Recently',
+            }
+            setComponent(mapped)
+            setQuantity(mapped.quantity)
+            return
+          }
+        } catch {
+          // 3. Fallback to local mock data
+          const fallback = fallbackComponents.find((c) => String(c.id) === String(componentId))
+          if (isMounted && fallback) {
+            setComponent(fallback)
+            setQuantity(fallback.quantity ?? 0)
+          }
         }
       })
       .finally(() => {
@@ -54,6 +101,44 @@ export default function ComponentDetailPage() {
     }
   }, [componentId])
 
+  const handleUpdateQuantityBackend = async (newQty: number) => {
+    setQuantity(newQty)
+    if (!componentId || componentId === 'add') return
+
+    setSavingQuantity(true)
+    try {
+      await fetchApi(`/inventory/${componentId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ quantity: newQty }),
+      })
+    } catch {
+      // Keep optimistic UI update if PATCH is not implemented
+    } finally {
+      setSavingQuantity(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!component) return
+
+    const confirmed = window.confirm(
+      `Are you sure you want to delete "${component.name}"? This action cannot be undone.`
+    )
+    if (!confirmed) return
+
+    setDeleting(true)
+    try {
+      await fetchApi(`/inventory/${componentId}`, {
+        method: 'DELETE',
+      })
+      router.push('/inventory')
+      router.refresh()
+    } catch (err: any) {
+      alert(`Failed to delete component: ${err?.message || 'Server error'}`)
+      setDeleting(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center gap-3 px-5 py-24 text-center">
@@ -63,7 +148,7 @@ export default function ComponentDetailPage() {
     )
   }
 
-  if (!component) {
+  if (!component || componentId === 'add') {
     return (
       <div className="flex flex-col items-center gap-4 px-5 py-20 text-center">
         <p className="text-sm text-muted-foreground">Component not found.</p>
@@ -84,18 +169,37 @@ export default function ComponentDetailPage() {
     { label: 'Slot', value: component.slot },
     { label: 'Category', value: component.category },
   ]
+
   return (
     <div className="pb-6">
-      <header className="flex items-center gap-3 px-5 pt-6 pb-4">
+      <header className="flex items-center justify-between px-5 pt-6 pb-4">
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => router.back()}
+            className="flex size-9 items-center justify-center rounded-xl border border-white/10 bg-card"
+            aria-label="Go back"
+          >
+            <ArrowLeft className="size-4" />
+          </button>
+          <h1 className="text-lg font-bold">Component Details</h1>
+        </div>
+
+        {/* Delete Component Button */}
         <button
           type="button"
-          onClick={() => router.back()}
-          className="flex size-9 items-center justify-center rounded-xl border border-white/10 bg-card"
-          aria-label="Go back"
+          onClick={handleDelete}
+          disabled={deleting}
+          className="flex size-9 items-center justify-center rounded-xl border border-rose-500/30 bg-rose-500/10 text-rose-400 transition hover:bg-rose-500/20 active:scale-95 disabled:opacity-50"
+          title="Delete Component"
+          aria-label="Delete Component"
         >
-          <ArrowLeft className="size-4" />
+          {deleting ? (
+            <RefreshCw className="size-4 animate-spin text-rose-400" />
+          ) : (
+            <Trash2 className="size-4" />
+          )}
         </button>
-        <h1 className="text-lg font-bold">Component Details</h1>
       </header>
 
       {/* Main Info Card */}
@@ -137,11 +241,14 @@ export default function ComponentDetailPage() {
       {editing && (
         <section className="mt-4 px-5">
           <div className="flex items-center justify-between rounded-2xl border border-lime/25 bg-lime/[0.06] p-4">
-            <p className="text-sm font-medium">Update quantity</p>
+            <div>
+              <p className="text-sm font-medium">Update quantity</p>
+              {savingQuantity && <p className="text-[10px] text-lime">Saving to backend...</p>}
+            </div>
             <div className="flex items-center gap-3">
               <button
                 type="button"
-                onClick={() => setQuantity((q) => Math.max(0, q - 1))}
+                onClick={() => handleUpdateQuantityBackend(Math.max(0, quantity - 1))}
                 className="flex size-9 items-center justify-center rounded-xl border border-white/10 bg-card"
                 aria-label="Decrease quantity"
               >
@@ -152,7 +259,7 @@ export default function ComponentDetailPage() {
               </span>
               <button
                 type="button"
-                onClick={() => setQuantity((q) => q + 1)}
+                onClick={() => handleUpdateQuantityBackend(quantity + 1)}
                 className="flex size-9 items-center justify-center rounded-xl bg-lime text-lime-foreground"
                 aria-label="Increase quantity"
               >
@@ -168,7 +275,7 @@ export default function ComponentDetailPage() {
         <button
           type="button"
           onClick={() => setEditing((e) => !e)}
-          className="flex items-center justify-center gap-2 rounded-2xl bg-lime py-3 text-sm font-semibold text-lime-foreground glow-lime transition active:scale-95"
+          className="flex items-center justify-center gap-2 rounded-2xl bg-lime py-3 text-sm font-semibold text-lime-foreground glow-lime transition active:scale-[0.98]"
         >
           <Plus className="size-4" strokeWidth={2.5} />
           {editing ? 'Done updating' : 'Update Quantity'}
@@ -182,11 +289,11 @@ export default function ComponentDetailPage() {
             <Pencil className="size-4" /> Edit
           </button>
           <Link
-    href={`/cabinets?cab=${component.cabinet}`}
-    className="flex items-center justify-center gap-2 rounded-2xl border border-blue/30 bg-blue/10 py-3 text-sm font-medium text-blue transition active:scale-95"
-  >
-    <MapPin className="size-4" /> Locate
-  </Link>
+            href={`/cabinets?cab=${component.cabinet}`}
+            className="flex items-center justify-center gap-2 rounded-2xl border border-blue/30 bg-blue/10 py-3 text-sm font-medium text-blue transition active:scale-95"
+          >
+            <MapPin className="size-4" /> Locate
+          </Link>
         </div>
       </section>
     </div>

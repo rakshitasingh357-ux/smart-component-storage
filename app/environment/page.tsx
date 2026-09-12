@@ -10,16 +10,11 @@ import { cn } from '@/lib/utils'
 import { fetchApi } from '@/lib/api'
 import { ScreenHeader } from '@/components/app-shell'
 import { SensorChart, ChartAxis } from '@/components/sensor-chart'
-import { RefreshCw, Sliders, AlertTriangle, ShieldCheck } from 'lucide-react'
+import { RefreshCw } from 'lucide-react'
 
 export default function EnvironmentPage() {
   const [cabinetList, setCabinetList] = useState<any[]>(fallbackCabinets)
   const [loading, setLoading] = useState<boolean>(true)
-
-  // Interactive Digital Twin Simulation state
-  const [simHumidity, setSimHumidity] = useState<number>(45)
-  const [isSimulating, setIsSimulating] = useState<boolean>(false)
-  const [simFeedback, setSimFeedback] = useState<string | null>(null)
 
   const loadEnvironmentData = async () => {
     setLoading(true)
@@ -40,27 +35,6 @@ export default function EnvironmentPage() {
   useEffect(() => {
     loadEnvironmentData()
   }, [])
-
-  // Send simulation payload to backend on slider release
-  const handleSimulateChange = async (value: number) => {
-    setIsSimulating(true)
-    setSimFeedback(null)
-    try {
-      await fetchApi('/telemetry/simulate', {
-        method: 'POST',
-        body: JSON.stringify({
-          humidity: value,
-          timestamp: new Date().toISOString(),
-        }),
-      })
-      setSimFeedback(value > 60 ? 'Breach triggered: Notification dispatched' : 'Nominal range restored')
-    } catch {
-      // Graceful local feedback if backend simulator route is not active yet
-      setSimFeedback(value > 60 ? 'Simulated breach: Humidity exceeded 60%' : 'Simulated nominal humidity')
-    } finally {
-      setIsSimulating(false)
-    }
-  }
 
   const validTempCabinets = useMemo(
     () => cabinetList.filter((c: any) => typeof c.temperature === 'number'),
@@ -95,61 +69,6 @@ export default function EnvironmentPage() {
           </button>
         }
       />
-
-      {/* Digital Twin Simulator Control */}
-      <section className="mb-4 px-5">
-        <div className="rounded-2xl border border-purple-500/30 bg-purple-950/20 p-4 backdrop-blur-md">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Sliders className="size-4 text-purple-400" />
-              <p className="text-xs font-semibold tracking-wide text-purple-200 uppercase">
-                Digital Twin Telemetry Simulator
-              </p>
-            </div>
-            <span
-              className={cn(
-                'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium',
-                simHumidity > 60
-                  ? 'border border-rose-500/40 bg-rose-500/20 text-rose-300'
-                  : 'border border-lime/40 bg-lime/15 text-lime'
-              )}
-            >
-              {simHumidity > 60 ? (
-                <>
-                  <AlertTriangle className="size-3" /> Critical Humidity
-                </>
-              ) : (
-                <>
-                  <ShieldCheck className="size-3" /> Safe Storage
-                </>
-              )}
-            </span>
-          </div>
-
-          <div className="mt-3">
-            <div className="flex justify-between text-xs text-muted-foreground">
-              <span>Simulated Chamber Humidity</span>
-              <span className="font-mono font-bold text-foreground">{simHumidity}% RH</span>
-            </div>
-            <input
-              type="range"
-              min="20"
-              max="95"
-              value={simHumidity}
-              onChange={(e) => setSimHumidity(Number(e.target.value))}
-              onMouseUp={() => handleSimulateChange(simHumidity)}
-              onTouchEnd={() => handleSimulateChange(simHumidity)}
-              className="mt-2 h-2 w-full cursor-pointer appearance-none rounded-lg bg-white/10 accent-purple-500"
-            />
-          </div>
-
-          {simFeedback && (
-            <p className="mt-2 text-center text-[11px] text-purple-300/80">
-              {simFeedback} {isSimulating && '...'}
-            </p>
-          )}
-        </div>
-      </section>
 
       {/* Top Telemetry Summary Cards */}
       <section className="grid grid-cols-2 gap-3 px-5">

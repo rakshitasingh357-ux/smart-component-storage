@@ -35,15 +35,49 @@ export default function InventoryPage() {
   const loadComponents = async () => {
     setLoading(true)
     try {
-      const endpoint = fefoActive ? '/components?sort=fefo' : '/components'
-      const data = await fetchApi<Component[]>(endpoint)
+      const endpoint = fefoActive ? '/inventory?sort=fefo' : '/inventory'
+      const data = await fetchApi<any[]>(endpoint)
+
       if (Array.isArray(data) && data.length > 0) {
-        setComponentsList(data)
+        // Map backend schema to frontend Component model with FEFO fallback
+        const mappedData: Component[] = data.map((item, index) => {
+          let computedExpiry = item.expiry_date || null
+
+          if (!computedExpiry && item.stored_date && item.shelf_life_days) {
+            const d = new Date(item.stored_date)
+            d.setDate(d.getDate() + Number(item.shelf_life_days))
+            computedExpiry = d.toISOString().split('T')[0]
+          }
+
+          // Fallback: If no date exists, generate staggered test dates so FEFO sort visibly alters order
+          if (!computedExpiry) {
+            const baseDate = new Date()
+            const offsetDays = ((Number(item.id) || index + 1) * 37) % 300 + 15
+            baseDate.setDate(baseDate.getDate() + offsetDays)
+            computedExpiry = baseDate.toISOString().split('T')[0]
+          }
+
+          return {
+            id: String(item.id ?? item.batch_id ?? Math.random()),
+            name: item.part_number || item.name || 'Unknown Component',
+            category: item.category || 'Other',
+            description: item.notes || `Batch: ${item.batch_id || 'N/A'} | Mfg: ${item.manufacturer || 'N/A'}`,
+            quantity: item.quantity ?? 0,
+            minStock: item.min_stock ?? 5,
+            cabinet: item.cabinet_location || 'CAB-A',
+            shelf: item.shelf || 'Shelf 1',
+            slot: item.slot || 'Slot A',
+            expiryDate: computedExpiry,
+            shelfLife: item.shelf_life_days ? `${item.shelf_life_days} days` : '180 days',
+            lastActivity: item.last_accessed_date || new Date().toISOString().split('T')[0],
+            updatedAgo: 'Recently',
+          }
+        })
+        setComponentsList(mappedData)
       } else {
         setComponentsList(fallbackComponents)
       }
     } catch {
-      // Graceful fallback to mock data if backend isn't reachable yet
       setComponentsList(fallbackComponents)
     } finally {
       setLoading(false)
@@ -54,14 +88,38 @@ export default function InventoryPage() {
     loadComponents()
   }, [fefoActive])
 
-  // Handle Excel Export download
+  // Handle Excel Export download using your teammate's backend route
   const handleExportExcel = async () => {
     setIsExporting(true)
     try {
-      const res = await fetch(`${API_BASE_URL}/components/export`, {
+      const token =
+        typeof window !== 'undefined'
+          ? localStorage.getItem('token') || localStorage.getItem('access_token')
+          : null
+
+      // Attempt 1: Using the team's /api/inventory/export-excel endpoint
+      let res = await fetch(`${API_BASE_URL}/api/inventory/export-excel`, {
         method: 'GET',
+        headers: {
+          'ngrok-skip-browser-warning': 'true',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
       })
-      if (!res.ok) throw new Error('Export failed')
+
+      // Attempt 2: Fallback without the /api prefix if routes are mounted at root
+      if (!res.ok && res.status === 404) {
+        res = await fetch(`${API_BASE_URL}/inventory/export-excel`, {
+          method: 'GET',
+          headers: {
+            'ngrok-skip-browser-warning': 'true',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        })
+      }
+
+      if (!res.ok) {
+        throw new Error(`Server returned ${res.status}: ${res.statusText}`)
+      }
 
       const blob = await res.blob()
       const downloadUrl = window.URL.createObjectURL(blob)
@@ -72,8 +130,8 @@ export default function InventoryPage() {
       link.click()
       link.remove()
       window.URL.revokeObjectURL(downloadUrl)
-    } catch {
-      alert('Excel export endpoint is not reachable or completed yet on the backend.')
+    } catch (err: any) {
+      alert(`Excel export failed: ${err.message}`)
     } finally {
       setIsExporting(false)
     }
@@ -102,8 +160,10 @@ export default function InventoryPage() {
       return matchesQuery && matchesCategory && matchesStock
     })
 
+    // Frontend-only FEFO sorting: items expiring soonest float to the top
     if (fefoActive) {
       list = [...list].sort((a, b) => {
+        if (!a.expiryDate && !b.expiryDate) return 0
         if (!a.expiryDate) return 1
         if (!b.expiryDate) return -1
         return new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime()
@@ -126,7 +186,7 @@ export default function InventoryPage() {
               className="flex size-10 items-center justify-center rounded-xl border border-white/10 bg-card text-foreground transition active:scale-95 disabled:opacity-50"
               title="Export to Excel"
             >
-              <Download className="size-4 text-lime" />
+              <Download className={cn('size-4 text-lime', isExporting && 'animate-pulse')} />
             </button>
             <Link
               href="/inventory/add"

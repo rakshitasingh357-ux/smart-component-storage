@@ -2,212 +2,282 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Check } from 'lucide-react'
-import { cabinets } from '@/data/mock-data'
-import { cn } from '@/lib/utils'
+import Link from 'next/link'
+import { ArrowLeft, Save } from 'lucide-react'
 
-const categories: string[] = [
+import { ScreenHeader } from '@/components/app-shell'
+import { fetchApi } from '@/lib/api'
+
+const CATEGORIES = [
   'Microcontrollers',
   'Wireless Modules',
-  'Voltage Regulators',
-  'Capacitors',
-  'Transistors',
-  'Resistors',
   'Sensors',
+  'Op-Amps',
+  'Passives',
+  'Power Management',
+  'RF Transceivers',
+  'Connectors',
+  'Other',
 ]
-
-interface FormState {
-  name: string
-  category: string
-  quantity: string
-  minStock: string
-  cabinetId: string
-  shelf: string
-  slot: string
-  description: string
-}
-
-const empty: FormState = {
-  name: '',
-  category: '',
-  quantity: '',
-  minStock: '',
-  cabinetId: '',
-  shelf: '',
-  slot: '',
-  description: '',
-}
-
-const fieldClass =
-  'w-full rounded-xl border border-white/10 bg-card px-3 py-2.5 text-sm outline-none placeholder:text-muted-foreground focus:border-lime/40'
 
 export default function AddComponentPage() {
   const router = useRouter()
-  const [form, setForm] = useState<FormState>(empty)
-  const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({})
-  const [saved, setSaved] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  function update<K extends keyof FormState>(key: K, value: string) {
-    setForm((f) => ({ ...f, [key]: value }))
+  const [formData, setFormData] = useState({
+    name: '',
+    category: '',
+    cabinet: 'CAB-A',
+    row: 'ROW-A',
+    slot: 'Slot 1',
+    quantity: 1,
+    minStock: 5,
+    expiryDate: '',
+    description: '',
+  })
+
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
+  ) => {
+    const { name, value } = e.target
+    setFormData((prev) => ({
+      ...prev,
+      [name]: name === 'quantity' || name === 'minStock' ? Number(value) : value,
+    }))
   }
 
-  function validate() {
-    const next: Partial<Record<keyof FormState, string>> = {}
-    if (!form.name.trim()) next.name = 'Name is required'
-    if (!form.category) next.category = 'Choose a category'
-    if (!form.quantity || Number(form.quantity) < 0) next.quantity = 'Enter a valid quantity'
-    if (!form.minStock || Number(form.minStock) < 0) next.minStock = 'Enter a minimum level'
-    if (!form.cabinetId) next.cabinetId = 'Choose a cabinet'
-    if (!form.slot.trim()) next.slot = 'Slot is required'
-    setErrors(next)
-    return Object.keys(next).length === 0
-  }
-
-  function handleSubmit(e: React.FormEvent) {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!validate()) return
-    setSaved(true)
-    setTimeout(() => router.push('/inventory'), 900)
+    setSubmitting(true)
+    setError(null)
+
+    const rowLetter = formData.row.includes('B') ? 'B' : 'A'
+    const slotNumber = formData.slot.replace(/[^0-9]/g, '') || '1'
+    const cabinetLocation = `${formData.cabinet} - ROW-${rowLetter} - SLOT ${slotNumber}`
+
+    const today = new Date().toISOString().split('T')[0]
+    const randomBatch = `BATCH-${Math.floor(1000 + Math.random() * 9000)}`
+
+    let shelfLifeDays = 365
+    if (formData.expiryDate) {
+      const diffMs = new Date(formData.expiryDate).getTime() - new Date(today).getTime()
+      const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
+      if (diffDays > 0) shelfLifeDays = diffDays
+    }
+
+    try {
+      await fetchApi('/inventory', {
+        method: 'POST',
+        body: JSON.stringify({
+          batch_id: randomBatch,
+          part_number: formData.name,
+          manufacturer: 'Generic',
+          category: formData.category,
+          cabinet_location: cabinetLocation,
+          quantity: Number(formData.quantity) || 1,
+          stored_date: today,
+          last_accessed_date: today,
+          expiry_date: formData.expiryDate || null,
+          min_temperature_c: 15.0,
+          max_temperature_c: 30.0,
+          max_humidity_percent: 60.0,
+          shelf_life_days: shelfLifeDays,
+          notes: formData.description || 'Added via UI',
+        }),
+      })
+
+      router.push('/inventory')
+      router.refresh()
+    } catch (err: any) {
+      setError(err?.message || 'Failed to create component. Check backend connection.')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
-    <div className="pb-6">
-      <header className="flex items-center gap-3 px-5 pt-6 pb-4">
-        <button
-          type="button"
-          onClick={() => router.back()}
-          className="flex size-9 items-center justify-center rounded-xl border border-white/10 bg-card"
-          aria-label="Go back"
-        >
-          <ArrowLeft className="size-4" />
-        </button>
-        <h1 className="text-lg font-bold">Add Component</h1>
-      </header>
-
-      <form onSubmit={handleSubmit} className="flex flex-col gap-4 px-5">
-        <Field label="Component Name" error={errors.name}>
-          <input
-            className={fieldClass}
-            placeholder="e.g. ATmega328P"
-            value={form.name}
-            onChange={(e) => update('name', e.target.value)}
-          />
-        </Field>
-
-        <Field label="Category" error={errors.category}>
-          <select
-            className={cn(fieldClass, !form.category && 'text-muted-foreground')}
-            value={form.category}
-            onChange={(e) => update('category', e.target.value)}
+    <div className="min-h-screen pb-12">
+      <ScreenHeader
+        title="Add Component"
+        action={
+          <Link
+            href="/inventory"
+            className="flex size-10 items-center justify-center rounded-xl border border-white/10 bg-card text-foreground transition active:scale-95"
           >
-            <option value="">Select category</option>
-            {categories.map((c) => (
-              <option key={c} value={c} className="text-foreground">
-                {c}
-              </option>
-            ))}
-          </select>
-        </Field>
+            <ArrowLeft className="size-5" />
+          </Link>
+        }
+      />
 
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Quantity" error={errors.quantity}>
-            <input
-              type="number"
-              min={0}
-              className={fieldClass}
-              placeholder="0"
-              value={form.quantity}
-              onChange={(e) => update('quantity', e.target.value)}
-            />
-          </Field>
-          <Field label="Min. Stock Level" error={errors.minStock}>
-            <input
-              type="number"
-              min={0}
-              className={fieldClass}
-              placeholder="0"
-              value={form.minStock}
-              onChange={(e) => update('minStock', e.target.value)}
-            />
-          </Field>
-        </div>
+      <form onSubmit={handleSubmit} className="mx-auto max-w-xl px-5 pt-4">
+        {error && (
+          <div className="mb-4 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-300">
+            {error}
+          </div>
+        )}
 
-        <Field label="Cabinet" error={errors.cabinetId}>
-          <select
-            className={cn(fieldClass, !form.cabinetId && 'text-muted-foreground')}
-            value={form.cabinetId}
-            onChange={(e) => update('cabinetId', e.target.value)}
+        <div className="flex flex-col gap-4">
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+              Component Name / Part Number
+            </label>
+            <input
+              type="text"
+              name="name"
+              required
+              value={formData.name}
+              onChange={handleChange}
+              placeholder="e.g. ESP32-WROOM-32D"
+              className="w-full rounded-xl border border-white/10 bg-card px-4 py-3 text-sm text-foreground outline-none transition focus:border-lime"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+              Category
+            </label>
+            <div className="relative">
+              <select
+                name="category"
+                required
+                value={formData.category}
+                onChange={handleChange}
+                className="w-full appearance-none rounded-xl border border-white/10 bg-card px-4 py-3 text-sm text-foreground outline-none transition focus:border-lime"
+              >
+                <option value="" disabled className="bg-zinc-900 text-zinc-400">
+                  Select category
+                </option>
+                {CATEGORIES.map((cat) => (
+                  <option key={cat} value={cat} className="bg-zinc-900 text-white">
+                    {cat}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                Cabinet
+              </label>
+              <select
+                name="cabinet"
+                value={formData.cabinet}
+                onChange={handleChange}
+                className="w-full appearance-none rounded-xl border border-white/10 bg-card px-3 py-3 text-sm text-foreground outline-none transition focus:border-lime"
+              >
+                <option value="CAB-A" className="bg-zinc-900 text-white">Cabinet A</option>
+                <option value="CAB-B" className="bg-zinc-900 text-white">Cabinet B</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                Row
+              </label>
+              <select
+                name="row"
+                value={formData.row}
+                onChange={handleChange}
+                className="w-full appearance-none rounded-xl border border-white/10 bg-card px-3 py-3 text-sm text-foreground outline-none transition focus:border-lime"
+              >
+                <option value="ROW-A" className="bg-zinc-900 text-white">ROW-A</option>
+                <option value="ROW-B" className="bg-zinc-900 text-white">ROW-B</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                Slot
+              </label>
+              <select
+                name="slot"
+                value={formData.slot}
+                onChange={handleChange}
+                className="w-full appearance-none rounded-xl border border-white/10 bg-card px-3 py-3 text-sm text-foreground outline-none transition focus:border-lime"
+              >
+                <option value="Slot 1" className="bg-zinc-900 text-white">Slot 1</option>
+                <option value="Slot 2" className="bg-zinc-900 text-white">Slot 2</option>
+                <option value="Slot 3" className="bg-zinc-900 text-white">Slot 3</option>
+                <option value="Slot 4" className="bg-zinc-900 text-white">Slot 4</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                Initial Qty
+              </label>
+              <input
+                type="number"
+                name="quantity"
+                min="0"
+                required
+                value={formData.quantity}
+                onChange={handleChange}
+                className="w-full rounded-xl border border-white/10 bg-card px-3 py-3 text-sm text-foreground outline-none transition focus:border-lime"
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                Min Stock
+              </label>
+              <input
+                type="number"
+                name="minStock"
+                min="0"
+                value={formData.minStock}
+                onChange={handleChange}
+                className="w-full rounded-xl border border-white/10 bg-card px-3 py-3 text-sm text-foreground outline-none transition focus:border-lime"
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                Expiry Date
+              </label>
+              <input
+                type="date"
+                name="expiryDate"
+                value={formData.expiryDate}
+                onChange={handleChange}
+                className="w-full rounded-xl border border-white/10 bg-card px-3 py-3 text-sm text-foreground outline-none transition focus:border-lime"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+              Description / Notes
+            </label>
+            <textarea
+              name="description"
+              rows={3}
+              value={formData.description}
+              onChange={handleChange}
+              placeholder="Package type, pinout notes, or storage precautions..."
+              className="w-full rounded-xl border border-white/10 bg-card px-4 py-3 text-sm text-foreground outline-none transition focus:border-lime"
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={submitting}
+            className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-lime py-3.5 text-sm font-semibold text-lime-foreground transition active:scale-[0.98] disabled:opacity-50"
           >
-            <option value="">Select cabinet</option>
-            {cabinets.map((c) => (
-              <option key={c.id} value={c.id} className="text-foreground">
-                {c.id} — {c.name}
-              </option>
-            ))}
-          </select>
-        </Field>
-
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Shelf">
-            <input
-              className={fieldClass}
-              placeholder="e.g. A"
-              value={form.shelf}
-              onChange={(e) => update('shelf', e.target.value)}
-            />
-          </Field>
-          <Field label="Slot" error={errors.slot}>
-            <input
-              className={fieldClass}
-              placeholder="e.g. A3"
-              value={form.slot}
-              onChange={(e) => update('slot', e.target.value)}
-            />
-          </Field>
+            {submitting ? (
+              <span>Adding component...</span>
+            ) : (
+              <>
+                <Save className="size-4" />
+                <span>Save Component</span>
+              </>
+            )}
+          </button>
         </div>
-
-        <Field label="Description">
-          <textarea
-            rows={3}
-            className={cn(fieldClass, 'resize-none')}
-            placeholder="Notes about this component..."
-            value={form.description}
-            onChange={(e) => update('description', e.target.value)}
-          />
-        </Field>
-
-        <button
-          type="submit"
-          disabled={saved}
-          className="mt-2 flex items-center justify-center gap-2 rounded-2xl bg-lime py-3.5 text-sm font-semibold text-lime-foreground glow-lime disabled:opacity-70"
-        >
-          {saved ? (
-            <>
-              <Check className="size-4" strokeWidth={2.5} /> Component added
-            </>
-          ) : (
-            'Add Component'
-          )}
-        </button>
       </form>
     </div>
-  )
-}
-
-function Field({
-  label,
-  error,
-  children,
-}: {
-  label: string
-  error?: string
-  children: React.ReactNode
-}) {
-  return (
-    <label className="flex flex-col gap-1.5">
-      <span className="text-xs font-medium text-muted-foreground">{label}</span>
-      {children}
-      {error && <span className="text-[11px] text-danger">{error}</span>}
-    </label>
   )
 }

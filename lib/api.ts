@@ -23,9 +23,17 @@ export async function fetchApi<T>(endpoint: string, options: FetchOptions = {}):
     }
   }
 
+  // Retrieve token if stored in browser storage
+  const token =
+    typeof window !== "undefined"
+      ? localStorage.getItem("token") || localStorage.getItem("access_token")
+      : null;
+
   const response = await fetch(url, {
     headers: {
       "Content-Type": "application/json",
+      "ngrok-skip-browser-warning": "true",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...headers,
     },
     ...restOptions,
@@ -38,5 +46,11 @@ export async function fetchApi<T>(endpoint: string, options: FetchOptions = {}):
     );
   }
 
-  return response.json() as Promise<T>;
+  // Handle 204 No Content or responses with empty bodies
+  if (response.status === 204) {
+    return null as T;
+  }
+
+  const text = await response.text();
+  return text ? (JSON.parse(text) as T) : (null as T);
 }

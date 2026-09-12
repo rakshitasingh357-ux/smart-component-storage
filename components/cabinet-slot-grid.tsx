@@ -15,6 +15,7 @@ export interface SlotComponent {
 
 export interface SlotData {
   id: string;
+  occupied?: boolean;
   component?: SlotComponent | null;
   alert?: boolean;
 }
@@ -43,13 +44,11 @@ export function CabinetSlotGrid({
   onSelectSlot,
   onAddComponent,
 }: CabinetSlotGridProps) {
-  const [internalSelected, setInternalSelected] = useState<string>("A2");
+  const [internalSelected, setInternalSelected] = useState<string>("A1");
   const activeSlotId = controlledSelectedSlot ?? internalSelected;
 
-  // Local state to track added components dynamically across slots
   const [dynamicSlots, setDynamicSlots] = useState<Record<string, SlotComponent>>({});
 
-  // Inline form state
   const [isAdding, setIsAdding] = useState(false);
   const [formData, setFormData] = useState({
     partNumber: "",
@@ -59,9 +58,16 @@ export function CabinetSlotGrid({
 
   const cols = cabinet?.cols || 4;
   const rawRows = cabinet?.rows || [
-    { id: "A", label: "ROW-A" },
-    { id: "B", label: "ROW-B" },
+    { id: "A", label: "ROW-A", slots: [] },
+    { id: "B", label: "ROW-B", slots: [] },
   ];
+
+  const cleanSlotKey = (id?: string) =>
+    (id || "").replace(/^ROW-/, "").replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+
+  const activeKey = cleanSlotKey(activeSlotId);
+  const activeRowLetter = activeKey.charAt(0) || "A";
+  const activeSlotCol = activeKey.slice(1) || "1";
 
   const handleSelect = (slotId: string) => {
     setInternalSelected(slotId);
@@ -69,18 +75,12 @@ export function CabinetSlotGrid({
     if (onSelectSlot) onSelectSlot(slotId);
   };
 
-  const normalizeId = (id?: string) => (id ? id.replace(/^ROW-/, "").trim() : "");
-  const cleanActiveId = normalizeId(activeSlotId);
-
-  // Find slot data from props or locally assigned components
   let selectedSlotData: SlotData | null = null;
-  let selectedComponent: SlotComponent | null = dynamicSlots[cleanActiveId] || null;
+  let selectedComponent: SlotComponent | null = dynamicSlots[activeKey] || null;
 
   for (const r of rawRows) {
     if (Array.isArray(r.slots)) {
-      const match = r.slots.find(
-        (s) => normalizeId(s.id) === cleanActiveId || s.id === activeSlotId
-      );
+      const match = r.slots.find((s) => cleanSlotKey(s.id) === activeKey);
       if (match) {
         selectedSlotData = match;
         if (!selectedComponent && match.component) {
@@ -105,18 +105,15 @@ export function CabinetSlotGrid({
       alert: false,
     };
 
-    // Update locally so grid reflects occupancy immediately
     setDynamicSlots((prev) => ({
       ...prev,
-      [cleanActiveId]: newComponent,
+      [activeKey]: newComponent,
     }));
 
-    // Trigger parent/backend handler
     if (onAddComponent) {
-      onAddComponent(activeSlotId, newComponent);
+      onAddComponent(`ROW-${activeKey}`, newComponent);
     }
 
-    // Reset form
     setFormData({ partNumber: "", quantity: 1, batch: "" });
     setIsAdding(false);
   };
@@ -127,50 +124,49 @@ export function CabinetSlotGrid({
         Slot Grid
       </div>
 
-      {/* Main Grid Card */}
       <div className="rounded-3xl border border-purple-900/40 bg-[#160628]/90 p-5 shadow-2xl backdrop-blur-xl">
         {/* Column Numbers Header */}
         <div className="mb-3 flex items-center">
-          <div className="w-16" />
+          <div className="w-20 shrink-0" />
           <div className="grid flex-1 grid-cols-4 gap-3 text-center text-xs font-semibold text-purple-300/70">
             {Array.from({ length: cols }, (_, i) => (
-              <span key={i + 1}>{i + 1}</span>
+              <span key={i + 1}>Slot {i + 1}</span>
             ))}
           </div>
         </div>
 
         {/* Rows */}
         <div className="flex flex-col gap-3">
-          {rawRows.map((rowItem, rIdx) => {
+          {rawRows.map((rowItem) => {
             const rawId = typeof rowItem === "object" ? rowItem.id : rowItem;
-            const letter = String(rawId).replace(/^ROW-/, "");
+            const letter = String(rawId).replace(/^ROW-/, "").toUpperCase();
             const rowLabel = `ROW-${letter}`;
 
             return (
-              <div key={rowLabel} className="flex items-center">
-                <span className="w-16 text-xs font-semibold tracking-wider text-purple-300/80">
+              <div key={letter} className="flex items-center">
+                <span className="w-20 shrink-0 text-xs font-semibold tracking-wider text-purple-300/80">
                   {rowLabel}
                 </span>
 
                 <div className="grid flex-1 grid-cols-4 gap-3">
                   {Array.from({ length: cols }, (_, colIndex) => {
                     const colNum = colIndex + 1;
-                    const standardSlotId = `${letter}${colNum}`;
-                    const displaySlotId = `ROW-${standardSlotId}`;
+                    const standardSlotKey = `${letter}${colNum}`;
+                    const displaySlotId = `ROW-${standardSlotKey}`;
 
                     const slotData = rowItem.slots?.find(
-                      (s) => normalizeId(s.id) === standardSlotId
+                      (s) => cleanSlotKey(s.id) === standardSlotKey
                     );
 
                     const component =
-                      dynamicSlots[standardSlotId] || slotData?.component;
+                      dynamicSlots[standardSlotKey] || slotData?.component || null;
                     const isOccupied = Boolean(component);
-                    const isSelected = cleanActiveId === standardSlotId;
+                    const isSelected = activeKey === standardSlotKey;
                     const hasAlert = Boolean(slotData?.alert || component?.alert);
 
                     return (
                       <button
-                        key={standardSlotId}
+                        key={standardSlotKey}
                         type="button"
                         onClick={() => handleSelect(displaySlotId)}
                         className={`relative flex h-14 w-full items-center justify-center rounded-2xl transition-all duration-150 outline-none ${
@@ -218,11 +214,11 @@ export function CabinetSlotGrid({
         </div>
       </div>
 
-      {/* Dynamic Slot Detail / Add Component Card */}
+      {/* Selected Slot Detail Card */}
       <div className="mt-4 rounded-3xl border border-purple-900/30 bg-[#160628]/90 p-4 shadow-xl backdrop-blur-xl">
         <div className="flex items-center justify-between">
           <span className="font-mono text-xs font-bold text-white">
-            Slot {activeSlotId.startsWith("ROW-") ? activeSlotId : `ROW-${activeSlotId}`}
+            ROW-{activeRowLetter} · Slot {activeSlotCol}
           </span>
           {selectedComponent ? (
             isSlotAlert ? (
@@ -261,34 +257,49 @@ export function CabinetSlotGrid({
             <form onSubmit={handleCreateComponent} className="flex flex-col gap-3">
               <div className="grid grid-cols-3 gap-2">
                 <div className="flex flex-col gap-1">
-                  <label className="text-[10px] uppercase tracking-wider text-purple-300/70">Part Name/ID</label>
+                  <label className="text-[10px] uppercase tracking-wider text-purple-300/70">
+                    Part Name/ID
+                  </label>
                   <input
                     type="text"
                     required
                     placeholder="e.g. ESP32-WROOM"
                     value={formData.partNumber}
-                    onChange={(e) => setFormData({ ...formData, partNumber: e.target.value })}
+                    onChange={(e) =>
+                      setFormData({ ...formData, partNumber: e.target.value })
+                    }
                     className="w-full rounded-xl border border-purple-800/60 bg-[#250e3e]/80 px-2.5 py-1.5 text-xs text-white placeholder-purple-400/30 outline-none focus:border-purple-400"
                   />
                 </div>
                 <div className="flex flex-col gap-1">
-                  <label className="text-[10px] uppercase tracking-wider text-purple-300/70">Quantity</label>
+                  <label className="text-[10px] uppercase tracking-wider text-purple-300/70">
+                    Quantity
+                  </label>
                   <input
                     type="number"
                     min="1"
                     required
                     value={formData.quantity}
-                    onChange={(e) => setFormData({ ...formData, quantity: parseInt(e.target.value) || 1 })}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        quantity: parseInt(e.target.value) || 1,
+                      })
+                    }
                     className="w-full rounded-xl border border-purple-800/60 bg-[#250e3e]/80 px-2.5 py-1.5 text-xs text-white placeholder-purple-400/30 outline-none focus:border-purple-400"
                   />
                 </div>
                 <div className="flex flex-col gap-1">
-                  <label className="text-[10px] uppercase tracking-wider text-purple-300/70">Batch</label>
+                  <label className="text-[10px] uppercase tracking-wider text-purple-300/70">
+                    Batch
+                  </label>
                   <input
                     type="text"
                     placeholder="e.g. BAT-104"
                     value={formData.batch}
-                    onChange={(e) => setFormData({ ...formData, batch: e.target.value })}
+                    onChange={(e) =>
+                      setFormData({ ...formData, batch: e.target.value })
+                    }
                     className="w-full rounded-xl border border-purple-800/60 bg-[#250e3e]/80 px-2.5 py-1.5 text-xs text-white placeholder-purple-400/30 outline-none focus:border-purple-400"
                   />
                 </div>
@@ -312,7 +323,9 @@ export function CabinetSlotGrid({
             </form>
           ) : (
             <div className="flex items-center justify-between">
-              <span className="italic text-purple-300/50">No component assigned to this slot.</span>
+              <span className="italic text-purple-300/50">
+                No component assigned to this slot.
+              </span>
               <button
                 type="button"
                 onClick={() => setIsAdding(true)}

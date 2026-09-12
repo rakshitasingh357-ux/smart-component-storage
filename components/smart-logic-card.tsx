@@ -6,31 +6,50 @@ import { fetchApi } from '@/lib/api'
 import { cn } from '@/lib/utils'
 
 interface SmartLogicAlert {
-  severity: 'low' | 'medium' | 'high' | 'critical'
+  batchId?: string
+  partNumber?: string
+  alertType?: string
+  severity: string
+  message: string
   recommendation: string
-  message?: string
+  timestamp?: string
 }
 
 interface SmartLogicData {
-  component_id: string
+  batchId?: string
+  partNumber?: string
+  manufacturer?: string
+  category?: string
+  cabinetLocation?: string
+  quantity?: number
   lifecycle?: {
-    status: string
-    remaining_days: number
+    batchId?: string
+    partNumber?: string
+    storedDays?: number
+    remainingDays?: number
+    status?: string
   }
   idle?: {
-    status: string
-    idle_days: number
+    batchId?: string
+    partNumber?: string
+    idleDays?: number
+    idleLimit?: number
+    isIdle?: boolean
   }
   environment?: {
-    temperature: number
-    humidity: number
-    is_safe: boolean
+    batchId?: string
+    partNumber?: string
+    currentTemperature?: number | null
+    currentHumidity?: number | null
+    temperatureSafe?: boolean
+    humiditySafe?: boolean
+    environmentSafe?: boolean
   }
   alerts?: SmartLogicAlert[]
 }
 
 interface SmartLogicCardProps {
-  componentId: string
+  componentId: string | number
 }
 
 export function SmartLogicCard({ componentId }: SmartLogicCardProps) {
@@ -54,7 +73,7 @@ export function SmartLogicCard({ componentId }: SmartLogicCardProps) {
       })
       .catch((err) => {
         if (isMounted) {
-          setError(err.message || 'Failed to fetch Smart Logic data')
+          setError(err?.message || 'Failed to fetch Smart Logic data')
           setLoading(false)
         }
       })
@@ -86,7 +105,8 @@ export function SmartLogicCard({ componentId }: SmartLogicCardProps) {
     )
   }
 
-  const isSafe = data.environment?.is_safe ?? true
+  const isSafe = data.environment?.environmentSafe ?? true
+  const alerts = data.alerts ?? []
 
   return (
     <div className="space-y-4 rounded-2xl border border-white/10 bg-card p-5">
@@ -130,7 +150,7 @@ export function SmartLogicCard({ componentId }: SmartLogicCardProps) {
             {data.lifecycle?.status || 'Nominal'}
           </p>
           <p className="text-[11px] text-muted-foreground">
-            {data.lifecycle?.remaining_days ?? '--'} days remaining
+            {data.lifecycle?.remainingDays ?? '--'} days remaining
           </p>
         </div>
 
@@ -141,10 +161,10 @@ export function SmartLogicCard({ componentId }: SmartLogicCardProps) {
             <span>Idle State</span>
           </div>
           <p className="mt-1 text-sm font-semibold capitalize text-foreground">
-            {data.idle?.status || 'Active'}
+            {data.idle?.isIdle ? 'Idle Flagged' : 'Active'}
           </p>
           <p className="text-[11px] text-muted-foreground">
-            {data.idle?.idle_days ?? 0} days unaccessed
+            {data.idle?.idleDays ?? 0} days unaccessed
           </p>
         </div>
 
@@ -155,9 +175,13 @@ export function SmartLogicCard({ componentId }: SmartLogicCardProps) {
             <span>Storage Temp</span>
           </div>
           <p className="mt-1 text-sm font-semibold text-foreground">
-            {data.environment?.temperature != null ? `${data.environment.temperature}°C` : '--'}
+            {data.environment?.currentTemperature != null
+              ? `${data.environment.currentTemperature}°C`
+              : '--'}
           </p>
-          <p className="text-[11px] text-muted-foreground">Ambient reading</p>
+          <p className="text-[11px] text-muted-foreground">
+            {data.environment?.temperatureSafe ? 'Within limits' : 'Out of range'}
+          </p>
         </div>
 
         {/* Humidity */}
@@ -167,38 +191,55 @@ export function SmartLogicCard({ componentId }: SmartLogicCardProps) {
             <span>Humidity</span>
           </div>
           <p className="mt-1 text-sm font-semibold text-foreground">
-            {data.environment?.humidity != null ? `${data.environment.humidity}% RH` : '--'}
+            {data.environment?.currentHumidity != null
+              ? `${data.environment.currentHumidity}% RH`
+              : '--'}
           </p>
-          <p className="text-[11px] text-muted-foreground">Target &lt; 60%</p>
+          <p className="text-[11px] text-muted-foreground">
+            {data.environment?.humiditySafe ? 'Optimal' : 'Exceeded'}
+          </p>
         </div>
       </div>
 
       {/* Alerts & Recommendations */}
-      {data.alerts && data.alerts.length > 0 && (
+      {alerts.length > 0 && (
         <div className="space-y-2 pt-1">
           <p className="text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
             Active Recommendations
           </p>
-          {data.alerts.map((alert, index) => (
-            <div
-              key={index}
-              className={cn(
-                'rounded-xl border p-3 text-xs',
-                alert.severity === 'critical' || alert.severity === 'high'
-                  ? 'border-rose-500/30 bg-rose-500/10 text-rose-200'
-                  : 'border-amber-500/30 bg-amber-500/10 text-amber-200'
-              )}
-            >
-              <div className="flex items-center justify-between font-semibold">
-                <span className="capitalize">{alert.severity} Priority</span>
+          {alerts.map((alert, index) => {
+            const isCritical =
+              alert.severity?.toLowerCase() === 'critical' ||
+              alert.severity?.toLowerCase() === 'high'
+
+            return (
+              <div
+                key={index}
+                className={cn(
+                  'rounded-xl border p-3 text-xs',
+                  isCritical
+                    ? 'border-rose-500/30 bg-rose-500/10 text-rose-200'
+                    : 'border-amber-500/30 bg-amber-500/10 text-amber-200'
+                )}
+              >
+                <div className="flex items-center justify-between font-semibold">
+                  <span className="capitalize">
+                    {alert.alertType ? `${alert.alertType} · ` : ''}
+                    {alert.severity} Priority
+                  </span>
+                </div>
+                {alert.message && (
+                  <p className="mt-1 font-normal text-white/90">{alert.message}</p>
+                )}
+                {alert.recommendation && (
+                  <p className="mt-1">
+                    <span className="font-semibold text-white">Action: </span>
+                    {alert.recommendation}
+                  </p>
+                )}
               </div>
-              {alert.message && <p className="mt-1 font-normal text-white/90">{alert.message}</p>}
-              <p className="mt-1">
-                <span className="font-semibold text-white">Action: </span>
-                {alert.recommendation}
-              </p>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>
